@@ -12,17 +12,20 @@ The app parses the line in your browser, exchanges the refresh token for a Micro
 
 The password is only checked for format and is never sent. No credentials are stored in this repo.
 
-## AADSTS90023 fix
+## How the exchange works (server-first)
 
-If Microsoft returns `AADSTS90023` (cross-origin token redemption only for SPA apps), the site automatically retries the exchange server-side via `POST /api/token` (see `api/token.js`). That runs on Vercel, so the browser origin check does not apply.
+1. `POST /api/token` forwards to `login.microsoftonline.com/consumers/oauth2/v2.0/token` first, with no scope on the first try, then `common` once if needed. It does not abort on `invalid_grant` before trying the other tenant.
+2. Only if Microsoft returns the AADSTS90023 policy-offers variant does it retry once with explicit `https://graph.microsoft.com/Mail.Read` scope.
+3. If that still fails, the page shows the exact Microsoft error from each route — no masking.
+4. If the Azure app is a confidential Web app, it needs a client secret. Set `MS_CLIENT_SECRET` in Vercel env vars (never in the repo or frontend). If you own the app, you can instead re-register it as a Single-page application in Azure: App registrations → Authentication → Add platform → Single-page application → add your deployed site URL as the Redirect URI → Save.
 
-You can also fix it in Azure: App registrations → your app → Authentication → Add platform → Single-page application → add your deployed site URL as the Redirect URI → Save.
+`GET /api/token` returning `405 Use POST.` is healthy — it proves the function is deployed.
 
 ## Run it on Vercel
 
 1. Import this repo in Vercel
 2. Framework Preset: Other
-3. Deploy — no build step, no environment variables needed
+3. Deploy — no build step. Optional: set `MS_CLIENT_SECRET` only if your app is a confidential Web app.
 
 `api/token.js` deploys automatically as a Vercel Serverless Function.
 

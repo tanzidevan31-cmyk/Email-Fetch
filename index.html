@@ -129,6 +129,10 @@
   .console-err{display:none;margin:12px 16px 16px;background:rgba(188,47,47,.16);border:1px solid rgba(248,113,113,.45);color:#fecaca;border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:1.5}
   .console-err.show{display:block}
   .console-err b{color:#fff}
+  .err-details{margin-top:10px;border-top:1px solid rgba(248,113,113,.35);padding-top:9px;font-size:12px;line-height:1.55}
+  .err-details .ed-title{font-weight:800;color:#fff;letter-spacing:.03em;margin-bottom:5px}
+  .err-details .ed-row{font-family:"Cascadia Code","JetBrains Mono",ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:5px;color:#fecaca}
+  .err-details .ed-row b{color:#fff}
 
   /* AADSTS90023 fix panel */
   .fixpanel{margin-top:16px;background:var(--surface);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden}
@@ -298,7 +302,7 @@
 
   <header class="hero">
     <h1>Paste one line.<br/>Read the <span class="hl">whole inbox.</span></h1>
-    <p>Drop in an account line, and this page exchanges the <b>refresh token</b> with Microsoft, pulls mail from the <b>Graph API</b>, and renders a full inbox. If Microsoft blocks the in-browser exchange (<b>AADSTS90023</b>), it automatically retries through this site's <b>/api/token</b> endpoint when one is deployed (a ready-made function is in the fix panel below) — and nothing is left behind when the tab closes.</p>
+    <p>Drop in an account line, and this page exchanges the <b>refresh token</b> with Microsoft, pulls mail from the <b>Graph API</b>, and renders a full inbox. The exchange runs <b>server-side first</b>, through this site's own <b>/api/token</b> endpoint — a browser request carries an <b>Origin</b> header, and Microsoft refuses cross-origin redemption (<b>AADSTS90023</b>) unless the app is registered as a Single-Page Application. A server-side call sends no Origin, so the same token redeems fine. If the proxy is unreachable, the page falls back to a direct browser exchange — and if every route fails, it shows you the <b>exact error each route returned</b>, not a generic failure. Nothing is left behind when the tab closes.</p>
   </header>
 
   <!-- PASTE CONSOLE -->
@@ -379,54 +383,63 @@
   <section class="fixpanel" id="spaGuide" aria-label="Fix for the AADSTS90023 error">
     <div class="fix-head">
       <div style="min-width:0;flex:1">
-        <h2>Hitting <span class="mono">AADSTS90023</span>? The Azure app is registered as a Web app</h2>
-        <p>That error means Microsoft is refusing to redeem the refresh token <b>in a browser</b> because the app behind the client ID isn't a Single-Page Application. Two ways out — the two-minute registration fix below, or the automatic server-side fallback this page tries whenever its <code>/api/token</code> endpoint is deployed.</p>
+        <h2>Token exchange failing? Exchange it server-side — that's how working readers do it</h2>
+        <p>The browser is the problem, not your line. A browser <code>fetch</code> to Microsoft's token endpoint always sends an <b>Origin</b> header, and Entra only permits cross-origin redemption when the app's redirect URI is registered with platform type <b>spa</b> — otherwise you get <b>AADSTS90023</b>. A server-side call sends no Origin, so the identical exchange succeeds. That's why this page exchanges through <b>POST /api/token</b> first, and only falls back to a direct browser exchange if the proxy can't be reached. Two honest limits: if the token was issued to a confidential <b>Web</b> app, refreshing it also requires that app's <b>client_secret</b> — which only the app's owner has, and no proxy can substitute for it; and there is no portal setting for the <i>AllowedOriginForNativeAppCorsRequestInOAuthToken</i> allow list named in the error — it's Microsoft-managed, not something you can add your site to.</p>
       </div>
       <span class="fix-badge">AADSTS90023</span>
     </div>
     <div class="fix-grid">
       <div class="fix-col">
-        <h3>Fix 1 — Register the app as a Single-Page Application <span>(recommended)</span></h3>
+        <h3>Fix 1 — Server-side exchange via /api/token <span>(primary — works without owning the app)</span></h3>
+        <p>Deploying on Vercel? Add this one file next to <code>index.html</code>. It forwards the exchange to <code>login.microsoftonline.com/<b>consumers</b></code> (the personal-account tenant; the page retries <code>common</code> once if Microsoft answers <code>invalid_grant</code>), sends <b>no scope on the first attempt</b> — the token keeps its originally granted scopes — and returns Microsoft's response verbatim, so the page can show you the real error if there is one.</p>
+        <pre class="fix-code">// api/token.js — Vercel serverless function
+export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "POST")
+    return res.status(405).json({
+      error: "method_not_allowed",
+      error_description: "Use POST." });
+  const { client_id, refresh_token,
+          tenant, scope } = req.body || {};
+  if (!client_id || !refresh_token)
+    return res.status(400).json({ error: "missing_fields" });
+  const t = tenant === "common" ? "common" : "consumers";
+  const body = new URLSearchParams({
+    client_id, refresh_token,
+    grant_type: "refresh_token"
+  });
+  if (scope) body.set("scope", scope);
+  // Only if the token's app is a confidential Web app:
+  // set MS_CLIENT_SECRET in Vercel env — never in code.
+  if (process.env.MS_CLIENT_SECRET)
+    body.set("client_secret", process.env.MS_CLIENT_SECRET);
+  const r = await fetch(
+    "https://login.microsoftonline.com/" + t
+      + "/oauth2/v2.0/token",
+    { method: "POST",
+      headers: { "Content-Type":
+        "application/x-www-form-urlencoded" },
+      body });
+  return res.status(r.status).json(await r.json());
+}</pre>
+        <p class="fix-note">The function is stateless — it stores and logs nothing. <b>Health check:</b> opening <code>/api/token</code> in a browser (a GET) returning <code>405 method_not_allowed / "Use POST."</code> is correct and proves it's deployed — only a POST can exchange a token; never "fix" it by allowing GET, which would put refresh tokens in URLs and logs. Also note refresh tokens issued to SPA apps expire after <b>24 hours, non-sliding</b>; tokens for other public clients typically last ~90 days — after that only a fresh sign-in issues a new one.</p>
+      </div>
+      <div class="fix-col">
+        <h3>Fix 2 — Register the app as a Single-Page Application <span>(only if you own the app)</span></h3>
         <ol class="fix-steps">
           <li>Open the <b>Azure portal</b> → <b>App registrations</b> → the app whose client ID is in your account line.</li>
           <li>Go to <b>Authentication</b> in the left menu.</li>
           <li>Under <i>Platform configurations</i>, click <b>Add a platform</b> → choose <b>Single-page application</b>.</li>
-          <li>Enter <b>this site's own address</b> — the URL where you deployed this page — as the <b>Redirect URI</b>. It must match exactly, including the trailing slash, in this form:</li>
+          <li>Enter <b>this site's own address</b> — the URL where you deployed this page — as the <b>Redirect URI</b>. Redirect URIs are exact-match and path case-sensitive, in this form:</li>
         </ol>
         <div class="uri-chip">
           <code>https://your-deployed-site.vercel.app/</code>
         </div>
-        <p class="fix-note" style="margin:0 0 10px">Copy the address from your browser's address bar while you're on the deployed site, and paste it into Azure exactly as shown there.</p>
+        <p class="fix-note" style="margin:0 0 10px">Copy the address from your browser's address bar while you're on the deployed site, and paste it into Azure exactly as shown there. If the same URI is also listed under the <i>Web</i> platform, remove it from Web — don't duplicate one URI across platforms.</p>
         <ol class="fix-steps" start="5">
-          <li>Click <b>Configure</b>, then <b>Save</b>. You can leave any existing <i>Web</i> platform in place — adding the SPA platform is what unblocks the browser token exchange.</li>
-          <li>Come back here and paste your line again. No new refresh token is needed — the same line should now fetch.</li>
+          <li>Click <b>Configure</b>, then <b>Save</b>. The SPA platform type is what enables CORS on Microsoft's login endpoints, so the browser exchange this page falls back to can succeed.</li>
+          <li>Come back here and paste your line again. No new refresh token is needed — the same line should now fetch. If the client ID belongs to someone else's app, this fix isn't available to you — Fix 1 is the route that works for pasted tokens from other clients.</li>
         </ol>
-      </div>
-      <div class="fix-col">
-        <h3>Fix 2 — Automatic server-side fallback <span>(no Azure change)</span></h3>
-        <p>When the browser exchange fails with <code>AADSTS90023</code>, this page automatically retries the exact same exchange through <code>POST /api/token</code> <b>on this same site</b> — server-to-server calls aren't subject to the cross-origin rule, so a Web-app registration works. Nothing about the input changes, and credentials still live in memory only.</p>
-        <p>Deploying on Vercel? Add this one file next to <code>index.html</code> and the fallback is live:</p>
-        <pre class="fix-code">// api/token.js — Vercel serverless function
-export default async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "method_not_allowed" });
-  const { client_id, refresh_token } = req.body || {};
-  if (!client_id || !refresh_token)
-    return res.status(400).json({ error: "missing_fields" });
-  const body = new URLSearchParams({
-    client_id, refresh_token,
-    grant_type: "refresh_token",
-    scope: "https://graph.microsoft.com/Mail.Read"
-      + " https://graph.microsoft.com/User.Read offline_access"
-  });
-  const r = await fetch(
-    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    { method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body });
-  return res.status(r.status).json(await r.json());
-}</pre>
-        <p class="fix-note">The function is stateless — it forwards the exchange to Microsoft and returns the result. It stores nothing. On hosts without an <code>/api/token</code> endpoint, use Fix 1 instead.</p>
       </div>
     </div>
   </section>
@@ -439,7 +452,7 @@ export default async function handler(req, res) {
     </div>
     <div class="t">
       <span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2z"/></svg></span>
-      <div><h3>Browser-first, with a built-in fallback</h3><p>The token exchange normally goes straight to <code>login.microsoftonline.com</code> and mail to <code>graph.microsoft.com</code>. Only if Microsoft blocks the browser exchange (AADSTS90023) does the page retry through this site's own <code>/api/token</code> endpoint — never a third-party relay.</p></div>
+      <div><h3>Server-first exchange, browser as backup</h3><p>The token exchange goes through this site's own <code>/api/token</code> endpoint first — server-side calls carry no <code>Origin</code> header, so Microsoft's cross-origin block (AADSTS90023) doesn't apply. Only if that endpoint can't be reached does the page try Microsoft directly from the browser. Mail always comes straight from <code>graph.microsoft.com</code> — never a third-party relay.</p></div>
     </div>
     <div class="t">
       <span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6"/></svg></span>
@@ -451,10 +464,10 @@ export default async function handler(req, res) {
   <div class="below">
     <section class="panel">
       <h2>How the fetch actually works</h2>
-      <p class="sub">The refresh-token grant is the same flow desktop mail clients use — done in the browser first, with a server-side retry only when Microsoft blocks the browser exchange.</p>
+      <p class="sub">The refresh-token grant is the same flow desktop mail clients use — done server-side first, because a browser's Origin header is exactly what Microsoft gates on.</p>
       <div class="flowline">
         <div class="frow"><div class="rail"><span class="ball">1</span><span class="stem"></span></div><div class="ftext"><strong>Parse the line</strong><span>Split on <code>|</code> into email, password, refresh token, and client ID — validated live as you paste.</span></div></div>
-        <div class="frow"><div class="rail"><span class="ball">2</span><span class="stem"></span></div><div class="ftext"><strong>Exchange for an access token</strong><span><code>POST login.microsoftonline.com/common/oauth2/v2.0/token</code> with <code>grant_type=refresh_token</code> and scopes <code>Mail.Read</code> + <code>User.Read</code>. If that returns <code>AADSTS90023</code> (app registered as a Web app, not an SPA), the same exchange is automatically retried server-side via <code>POST /api/token</code> on this site. Tokens typically live ~60 minutes; if Microsoft rotates the refresh token, the new one is kept in memory.</span></div></div>
+        <div class="frow"><div class="rail"><span class="ball">2</span><span class="stem"></span></div><div class="ftext"><strong>Exchange for an access token</strong><span><code>POST /api/token</code> on this site forwards the exchange to <code>login.microsoftonline.com/consumers/oauth2/v2.0/token</code> with <code>grant_type=refresh_token</code> and <b>no scope</b> — the token keeps its originally granted scopes (guessing scopes risks <code>invalid_scope</code>). If Microsoft answers <code>invalid_grant</code>, the page retries once against the <code>common</code> tenant; if it answers the <code>AADSTS90023</code> "policy offers" variant, it retries once with an explicit <code>Mail.Read</code> scope. Only if the proxy itself is unreachable does the page try the same exchange directly from the browser (which works when the app is registered as an SPA). If Microsoft rotates the refresh token, the new one replaces the old in memory — the old one is never reused. If every route fails, the exact error from each route is shown — no silent retry loops.</span></div></div>
         <div class="frow"><div class="rail"><span class="ball">3</span><span class="stem"></span></div><div class="ftext"><strong>Read mail from Graph</strong><span><code>GET graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages</code> for the list, and <code>/me/messages/{id}</code> for full bodies — HTML is sanitized with DOMPurify before it renders.</span></div></div>
         <div class="frow"><div class="rail"><span class="ball">4</span></div><div class="ftext"><strong>Close the tab — it's all gone</strong><span>Access token, refresh token, and every loaded email exist only in JavaScript variables. The Wipe button in the inbox does the same thing on demand.</span></div></div>
       </div>
@@ -462,12 +475,12 @@ export default async function handler(req, res) {
 
     <section class="panel">
       <h2>Publish it anywhere</h2>
-      <p class="sub">This is one self-contained <code>index.html</code> — no build step, no environment variables. The only optional server piece is the <code>/api/token</code> fallback function, and only for Web-app registrations.</p>
+      <p class="sub">This is one self-contained <code>index.html</code> plus one small serverless function — no build step, no environment variables unless the token's app needs a client secret. The <code>/api/token</code> function is the primary exchange path, not an optional extra.</p>
       <ol class="deploy-steps">
         <li><b>GitHub:</b> create a repo, add this file as <code>index.html</code>, commit &amp; push.</li>
         <li><b>Vercel:</b> <i>New Project → Import</i> that repo. Framework preset: <b>Other</b>. No build command, output is the repo root. Deploy.</li>
-        <li><b>Anywhere else:</b> the same file works on Netlify Drop, Cloudflare Pages, GitHub Pages, or any static host.</li>
-        <li><b>Optional, for Web-app registrations:</b> add the <code>api/token.js</code> function shown in the AADSTS90023 panel above — Vercel picks it up automatically and the server-side fallback starts working.</li>
+        <li><b>Add the exchange function:</b> put the <code>api/token.js</code> from the panel above in an <code>api/</code> folder in the repo root — Vercel picks it up automatically. Check it afterwards: opening <code>your-site.vercel.app/api/token</code> should return <code>405 "Use POST."</code> — that means it's live.</li>
+        <li><b>Anywhere else:</b> the page alone works on any static host, but without an <code>/api/token</code> endpoint the exchange is browser-only and needs the app registered as an SPA (Fix 2 above).</li>
         <li>Open your URL, paste a line, fetch.</li>
       </ol>
       <button class="btn-dl" id="downloadBtn" type="button">
@@ -542,10 +555,6 @@ export default async function handler(req, res) {
 <script>
 (function(){
   "use strict";
-  var TOKEN_ENDPOINTS = [
-    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
-  ];
   var GRAPH = "https://graph.microsoft.com/v1.0";
   var FOLDERS = [
     {id:"inbox", label:"Inbox", icon:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z"/>'},
@@ -684,7 +693,7 @@ export default async function handler(req, res) {
     if(results.length===1 && !results[0].ok){
       els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span><b>Almost:</b> ' + esc(results[0].reason) + '. Format is <b>email|password|refresh_token|client_id</b> — no spaces around the pipes.</span>';
     } else if(validCount>0){
-      els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span><b>' + validCount + ' account' + (validCount>1?"s":"") + ' ready.</b> The refresh token is exchanged with Microsoft — in the browser first, and via this site\'s <b>/api/token</b> fallback only if Microsoft blocks the browser exchange (AADSTS90023).</span>';
+      els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span><b>' + validCount + ' account' + (validCount>1?"s":"") + ' ready.</b> The refresh token is exchanged with Microsoft — server-side via this site\'s <b>/api/token</b> first, with a direct browser exchange as backup if the proxy can\'t be reached.</span>';
     } else {
       els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span>Paste a line and watch it split into its four parts above. <b>Multiple accounts?</b> Paste one line per account — you can switch between them inside the inbox.</span>';
     }
@@ -712,106 +721,173 @@ export default async function handler(req, res) {
 
   function friendlyTokenError(errCode, desc){
     var d = String(desc || "");
-    if(/AADSTS90023/i.test(d) || /AADSTS90023/i.test(String(errCode || "")))
-      return "Microsoft blocked the <b>browser</b> token exchange (<b>AADSTS90023</b>): the app behind this client ID is registered as a <b>Web</b> app, and cross-origin token redemption is only allowed for <b>Single-Page Application</b> apps. The page already retried through this site's <b>/api/token</b> endpoint — if that isn't deployed (or also failed), use the fix panel below: in the Azure portal, add a <b>Single-page application</b> platform to the app with this site's URL as the redirect URI, then paste the line again.";
-    if(/AADSTS700082|AADSTS70008|expired/i.test(d) || errCode==="invalid_grant" && /expired/i.test(d))
-      return "This refresh token has <b>expired</b>. Microsoft refresh tokens die after ~90 days of non-use or when the password changes. You need a fresh account line with a newly issued token.";
+    if(/policy offers/i.test(d) && /scope parameter is not specified/i.test(d))
+      return "Microsoft answered <b>AADSTS90023</b> in its \"policy offers\" form: this refresh token carries no default scopes, so a scope <b>must</b> be sent. The page already retried with an explicit <b>Mail.Read</b> scope — the exact responses from every attempt are listed below.";
+    if(/should only be redeemed via cross-origin/i.test(d))
+      return "This token was issued to a <b>Single-Page Application</b> client, and Microsoft requires those to be redeemed from a <b>browser</b> (with an Origin header) — the opposite of the usual block. The page also tried the direct browser exchange; its exact result is listed below. If the browser attempt failed too, this site's address probably isn't registered as an SPA redirect URI for that app (see the fix panel).";
+    if(/Cross-origin token redemption/i.test(d) || /AADSTS90023/i.test(d) || /AADSTS90023/i.test(String(errCode || "")))
+      return "Microsoft blocked cross-origin redemption (<b>AADSTS90023</b>): the app behind this client ID has no redirect URI registered with platform type <b>spa</b> for this site's origin, so the <b>browser</b> exchange is refused. The server-side exchange through <b>/api/token</b> isn't subject to that rule — its exact result is listed below. If the server route also failed, the reason is in that result, not in your line.";
+    if(/AADSTS9002332/i.test(d)) return "Tenant mismatch (<b>AADSTS9002332</b>): the app behind this client ID accepts <b>work/school (Entra) accounts only</b>, so the personal-account (<code>consumers</code>) endpoint refuses it. The page's <code>common</code>-tenant result is listed below.";
+    if(/AADSTS700082|AADSTS70008/i.test(d) || (errCode==="invalid_grant" && /expired/i.test(d)))
+      return "This refresh token has <b>expired</b>. Tokens issued to SPA apps die after 24 hours; others typically after ~90 days of non-use, or when the password changes. You need a fresh account line with a newly issued token — no setting change revives this one.";
     if(/AADSTS50173/i.test(d)) return "Microsoft <b>revoked this refresh token</b> (usually after a password change or a security event). A fresh token is required.";
-    if(/AADSTS70000|invalid_grant/i.test(d)) return "Microsoft rejected the refresh token (<b>invalid_grant</b>). It may be revoked, mistyped, or issued for a different client ID than the one in this line.";
-    if(/AADSTS70011|invalid scope/i.test(d)) return "The requested mail scope isn't allowed for this client ID. The token must have been issued with <b>Mail.Read</b> / Graph access.";
-    if(/invalid_client|AADSTS70002/i.test(d)) return "The <b>client ID</b> in this line wasn't accepted — it must be the same app the refresh token was issued to.";
+    if(/consent_required|interaction_required/i.test(d) || errCode==="consent_required" || errCode==="interaction_required")
+      return "Microsoft needs an <b>interactive sign-in</b> (new consent or another auth step) before this token can be refreshed. A pasted refresh token alone can't satisfy that — the account must sign in again to issue a fresh token.";
+    if(/AADSTS70000|invalid_grant/i.test(d) || errCode==="invalid_grant") return "Microsoft rejected the refresh token (<b>invalid_grant</b>) on both tenants. It is expired, revoked, already rotated by an earlier successful exchange, mistyped, or was issued for a different client ID / tenant than the one in this line. Retrying the same token won't help — a fresh token is the fix.";
+    if(/AADSTS70011|invalid_scope|invalid scope/i.test(d) || errCode==="invalid_scope") return "A scope problem (<b>invalid_scope</b>): the scopes asked for aren't a subset of what this token was originally granted. This page asks for no scope by default, so the token itself was likely issued without <b>Mail.Read</b> / Graph consent.";
+    if(/invalid_client|AADSTS70002/i.test(d) || errCode==="invalid_client") return "<b>Client authentication failed</b> (<b>invalid_client</b>). Either the client ID doesn't match the app this token was issued to — or the app is a confidential <b>Web</b> app, in which case refreshing <b>requires that app's client_secret</b>. Only the app's owner has that secret; without it (set as <code>MS_CLIENT_SECRET</code> on the server) this token can't be refreshed by any site, and the account must re-authenticate against a public client instead.";
     if(/AADSTS50034|does not exist/i.test(d)) return "Microsoft says this <b>account doesn't exist</b> in that tenant. Check the email in the line.";
     return null;
   }
 
-  /* ---------- token exchange ---------- */
-  var TOKEN_SCOPE = "https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read offline_access";
-  function isAadsts90023(errInfo){
-    if(!errInfo) return false;
-    return /AADSTS90023/i.test(String(errInfo.desc || "")) || /AADSTS90023/i.test(String(errInfo.code || ""));
+  /* ---------- token exchange ----------
+     Order, per Microsoft's rules for the refresh-token grant:
+     1. Server-side first, via this site's POST /api/token. A server call
+        sends no Origin header, so Entra's cross-origin gate (AADSTS90023)
+        doesn't apply — this is the route that works for pasted tokens
+        issued to other clients.
+     2. Tenant "consumers" first for personal Outlook/Hotmail accounts;
+        on invalid_grant, retry once against "common" with the same token.
+     3. No scope on the first attempt (the token keeps its original
+        scopes). Only the AADSTS90023 "policy offers … scope parameter is
+        not specified" variant earns one retry, with an explicit
+        Mail.Read scope.
+     4. If the proxy is unreachable (404 / network / non-JSON), fall back
+        to the same sequence directly from the browser — the only route
+        that works for tokens issued to SPA clients.
+     Every attempt is recorded; if all fail, the caller shows each route's
+     exact status and Microsoft error. No silent loops: a token that has
+     been rejected as invalid_grant on both tenants is terminal. */
+  var SCOPED_RETRY = "https://graph.microsoft.com/Mail.Read";
+  function isCrossOriginBlock(info){
+    return !!info && /Cross-origin token redemption/i.test(String(info.desc || ""));
+  }
+  function isPolicyOffers(info){
+    return !!info && /policy offers/i.test(String(info.desc || "")) && /scope parameter is not specified/i.test(String(info.desc || ""));
+  }
+  function anyCrossOrigin(attempts){
+    return attempts.some(function(a){ return isCrossOriginBlock(a.info); });
   }
   function applyTokenData(acct, data, via){
     acct.accessToken = data.access_token;
     acct.expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
-    if(data.refresh_token && data.refresh_token !== acct.refreshToken) acct.refreshToken = data.refresh_token; // rotation
+    if(data.refresh_token && data.refresh_token !== acct.refreshToken) acct.refreshToken = data.refresh_token; // rotation: never reuse the old one
     acct.exchangeVia = via;
     acct.status = "connected"; acct.error = "";
     return acct.accessToken;
   }
-  /* Server-side fallback: POST /api/token on this same site performs the
-     refresh_token exchange server-to-server, where the cross-origin rule
-     behind AADSTS90023 doesn't apply — so Web-app registrations work.
-     Expected contract: JSON in {client_id, refresh_token, grant_type, scope},
-     JSON out = Microsoft's token response verbatim. */
-  async function serverExchange(acct){
-    var res = await fetch("/api/token", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        client_id: acct.clientId,
-        grant_type: "refresh_token",
-        refresh_token: acct.refreshToken,
-        scope: TOKEN_SCOPE
-      })
-    });
-    var data = null;
-    try { data = await res.json(); } catch(e){}
-    if(res.ok && data && data.access_token) return applyTokenData(acct, data, "server");
-    var err = new Error("Server fallback /api/token didn't return a token (HTTP " + res.status + ")" +
-      (data && (data.error_description || data.error) ? ": " + (data.error_description || data.error) : ""));
-    err.tokenError = {
-      code: (data && data.error) || ("HTTP " + res.status),
-      desc: (data && (data.error_description || data.error)) || res.statusText
-    };
-    throw err;
+  /* One raw exchange attempt. route "server": POST JSON to /api/token on
+     this same origin; the endpoint forwards it form-encoded to Microsoft.
+     route "browser": POST form-encoded straight to Microsoft.
+     Resolves to {status, data} or {unreachable:true, why} — never throws
+     for an expected failure mode. */
+  async function rawExchange(acct, route, tenant, scope){
+    if(route === "server"){
+      var res;
+      try {
+        res = await fetch("/api/token", {
+          method:"POST",
+          headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({
+            client_id: acct.clientId,
+            refresh_token: acct.refreshToken,
+            tenant: tenant,
+            scope: scope || undefined
+          })
+        });
+      } catch(netErr){
+        return { unreachable:true, why:"network error (" + (netErr.message || netErr) + ")" };
+      }
+      var data = null;
+      try { data = await res.json(); } catch(e){}
+      if(!data) return { unreachable:true, why:"HTTP " + res.status + " with a non-JSON response — /api/token is not deployed on this host, or the deployment errored" };
+      if(res.status === 404) return { unreachable:true, why:"HTTP 404 — no /api/token endpoint on this host" };
+      if(!res.ok && !data.error) return { unreachable:true, why:"HTTP " + res.status + " from /api/token, with no Microsoft error in the body" };
+      return { status: res.status, data: data };
+    }
+    var body = new URLSearchParams();
+    body.set("client_id", acct.clientId);
+    body.set("grant_type", "refresh_token");
+    body.set("refresh_token", acct.refreshToken);
+    if(scope) body.set("scope", scope);
+    var bres;
+    try {
+      bres = await fetch("https://login.microsoftonline.com/" + tenant + "/oauth2/v2.0/token", {
+        method:"POST",
+        headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+        body: body.toString()
+      });
+    } catch(netErr2){
+      // A TypeError here is almost always the CORS gate itself: the browser
+      // blocks the response before the page can read any error body.
+      return { unreachable:true, why:"browser blocked the request before any response (CORS) — the app is not registered as an SPA for this origin" };
+    }
+    var bdata = null;
+    try { bdata = await bres.json(); } catch(e2){}
+    return { status: bres.status, data: bdata || {} };
+  }
+  /* Run the tenant/scope sequence over one route. Pushes one entry per
+     attempt into `attempts`. Returns {data} on success, {unreachable:true}
+     if the route itself can't be used, or {terminal:true} when the token
+     was rejected as invalid_grant on both tenants. */
+  async function tryRoute(acct, route, attempts){
+    var tenants = ["consumers", "common"];
+    for(var ti=0; ti<tenants.length; ti++){
+      var tenant = tenants[ti];
+      var scope = null;
+      var lastInfo = null;
+      for(var s=0; s<2; s++){
+        var r = await rawExchange(acct, route, tenant, scope);
+        if(r.unreachable){
+          attempts.push({ route:route, tenant:tenant, scope:scope, unreachable:true, why:r.why });
+          return { unreachable:true };
+        }
+        if(r.data && r.data.access_token) return { data:r.data };
+        lastInfo = {
+          code: (r.data && r.data.error) || ("HTTP " + r.status),
+          desc: (r.data && (r.data.error_description || r.data.error)) || ("HTTP " + r.status)
+        };
+        attempts.push({ route:route, tenant:tenant, scope:scope, status:r.status, info:lastInfo });
+        if(s===0 && isPolicyOffers(lastInfo)){ scope = SCOPED_RETRY; continue; }
+        break;
+      }
+      // Only invalid_grant earns the second-tenant attempt (per the
+      // consumers-vs-common practice); anything else is final for this route.
+      if(!(lastInfo && lastInfo.code === "invalid_grant")) return {};
+      if(ti === tenants.length-1) return { terminal:true };
+    }
+    return {};
   }
   async function exchangeToken(acct){
-    var lastErr = null;
-    for(var i=0;i<TOKEN_ENDPOINTS.length;i++){
-      var body = new URLSearchParams();
-      body.set("client_id", acct.clientId);
-      body.set("grant_type", "refresh_token");
-      body.set("refresh_token", acct.refreshToken);
-      body.set("scope", TOKEN_SCOPE);
-      try {
-        var res = await fetch(TOKEN_ENDPOINTS[i], {
-          method:"POST",
-          headers:{ "Content-Type":"application/x-www-form-urlencoded" },
-          body: body.toString()
-        });
-        var data = null;
-        try { data = await res.json(); } catch(e){}
-        if(res.ok && data && data.access_token){
-          return applyTokenData(acct, data, "browser");
-        }
-        lastErr = {
-          code: (data && data.error) || ("HTTP " + res.status),
-          desc: (data && (data.error_description || data.error)) || res.statusText
-        };
-        // AADSTS90023: the app isn't an SPA, so no browser endpoint will ever
-        // redeem this token. Retry once through this site's /api/token.
-        if(isAadsts90023(lastErr)){
-          toast("Microsoft blocked the browser exchange (AADSTS90023) — retrying via this site's /api/token…");
-          try {
-            return await serverExchange(acct);
-          } catch(fbErr){
-            var err90023 = new Error("AADSTS90023: browser exchange blocked and the /api/token fallback didn't return a token. " + (fbErr.message || fbErr));
-            err90023.tokenError = lastErr;
-            err90023.is90023 = true;
-            err90023.fallbackError = fbErr;
-            throw err90023;
-          }
-        }
-        // endpoint retry only helps tenant-type mismatches; a hard invalid_grant is final
-        if(lastErr.code === "invalid_client") break;
-      } catch(netErr){
-        if(netErr && netErr.is90023) throw netErr;
-        lastErr = { code:"network", desc:"Couldn't reach login.microsoftonline.com — check your connection. (" + (netErr.message || netErr) + ")" };
+    var attempts = [];
+    var routes = ["server", "browser"];
+    var proxyDown = false;
+    for(var ri=0; ri<routes.length; ri++){
+      var route = routes[ri];
+      var out = await tryRoute(acct, route, attempts);
+      if(out.data){
+        if(route === "browser" && proxyDown)
+          toast("Token proxy unreachable — connected via the direct browser exchange instead");
+        return applyTokenData(acct, out.data, route);
       }
+      if(out.unreachable && route === "server"){
+        proxyDown = true;
+        toast("This site's /api/token endpoint isn't reachable — trying the token exchange directly in your browser…");
+        continue;
+      }
+      if(out.terminal) break; // invalid_grant on both tenants: dead token, stop
+      // Otherwise this route returned a Microsoft error the other route may
+      // answer differently (e.g. an SPA-issued token refuses server-side
+      // redemption but accepts the browser's) — try the next route once.
     }
-    var err = new Error(lastErr ? (lastErr.code + ": " + lastErr.desc) : "Token exchange failed");
-    err.tokenError = lastErr;
-    if(isAadsts90023(lastErr)) err.is90023 = true;
+    var lastMs = null;
+    for(var i=attempts.length-1; i>=0; i--){ if(attempts[i].info){ lastMs = attempts[i].info; break; } }
+    var err = new Error(lastMs ? (lastMs.code + ": " + lastMs.desc)
+      : (proxyDown ? "Token proxy unreachable and the direct browser exchange was blocked" : "Token exchange failed"));
+    err.tokenError = lastMs;
+    err.attempts = attempts;
+    err.proxyDown = proxyDown;
+    err.is90023 = anyCrossOrigin(attempts) || isPolicyOffers(lastMs);
     throw err;
   }
   async function ensureToken(acct){
@@ -886,13 +962,29 @@ export default async function handler(req, res) {
     setBusy(false);
     if(firstOk === -1){
       var f = failures[0];
-      var friendly = f && f.err.tokenError ? friendlyTokenError(f.err.tokenError.code, f.err.tokenError.desc) : null;
-      var is90023 = !!(f && f.err && (f.err.is90023 || isAadsts90023(f.err.tokenError)));
-      showErr("<b>Couldn't sign in" + (accounts.length>1 ? " to any account" : "") + ".</b><br/>" +
-        (friendly || esc(f ? f.err.message : "Unknown error")) +
+      var ferr = f ? f.err : null;
+      var friendly = ferr && ferr.tokenError ? friendlyTokenError(ferr.tokenError.code, ferr.tokenError.desc) : null;
+      var is90023 = !!(ferr && ferr.is90023);
+      var proxyOnly = !!(ferr && ferr.proxyDown && !ferr.tokenError);
+      var headline = proxyOnly
+        ? "<b>Couldn't sign in — the token exchange never reached Microsoft.</b><br/>This site's <b>/api/token</b> endpoint isn't reachable from here, and the direct browser exchange was blocked. Deploy the <code>api/token.js</code> function from the panel below (opening <b>/api/token</b> in a browser should answer <b>405 \"Use POST.\"</b>), or test on the deployed site instead of a preview."
+        : "<b>Couldn't sign in" + (accounts.length>1 ? " to any account" : "") + ".</b><br/>" + (friendly || esc(ferr ? ferr.message : "Unknown error"));
+      var detailsHtml = "";
+      if(ferr && ferr.attempts && ferr.attempts.length){
+        detailsHtml = '<div class="err-details"><div class="ed-title">Exactly what each route returned:</div>' +
+          ferr.attempts.map(function(a){
+            var routeLabel = a.route === "server" ? "POST /api/token (server-side)" : "Browser → Microsoft (direct)";
+            var scopeLabel = a.scope ? "scope: Mail.Read" : "scope: omitted";
+            if(a.unreachable) return '<div class="ed-row"><b>' + routeLabel + '</b> · tenant ' + esc(a.tenant) + ' · ' + scopeLabel + ' → unreachable: ' + esc(a.why || "") + '</div>';
+            return '<div class="ed-row"><b>' + routeLabel + '</b> · tenant ' + esc(a.tenant) + ' · ' + scopeLabel + ' → HTTP ' + a.status + ' · ' + esc(a.info.code) + ': ' + esc(a.info.desc) + '</div>';
+          }).join("") + '</div>';
+      }
+      showErr(headline +
         "<br/><span style='opacity:.85'>Account: " + esc(f ? f.acct.email : "") + " — the line was parsed correctly, so " +
-        (is90023 ? "the problem is the Azure app registration (Web instead of Single-Page Application), not your line." : "the problem is the token or client ID itself.") + "</span>");
-      if(is90023) revealGuide();
+        (proxyOnly ? "this is a deployment problem (missing /api/token), not your line." :
+         is90023 ? "the problem is the app registration / redemption channel, not your line." : "the problem is the token or client ID itself.") + "</span>" +
+        detailsHtml);
+      if(is90023 || proxyOnly) revealGuide();
       accounts = accounts.slice(0, prevCount);
       if(addMode){ addMode = false; var cb = $("addCancelBtn"); if(cb) cb.classList.add("hidden"); }
       return;
@@ -909,8 +1001,8 @@ export default async function handler(req, res) {
     await loadMessages(true);
     setStep(2, "done");
     toast(activeAccount().exchangeVia === "server"
-      ? "Connected as " + activeAccount().email + " — via the /api/token fallback (browser exchange was blocked)"
-      : "Connected as " + activeAccount().email);
+      ? "Connected as " + activeAccount().email + " — token exchanged server-side via /api/token"
+      : "Connected as " + activeAccount().email + " — via the direct browser exchange");
   }
 
   /* ---------- app chrome ---------- */
