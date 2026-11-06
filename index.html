@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Outlook Hotmail Email Fetcher</title>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+<style>
+  :root{
+    --bg:#eef2f7; --bg-grid:rgba(15,60,110,.055);
+    --surface:#ffffff; --surface-2:#f2f6fb; --surface-3:#e7eef7;
+    --ink:#0c1a2e; --muted:#52657e; --faint:#8496ad;
+    --line:#d9e3ef; --line-2:#bfcfdf;
+    --blue:#0078d4; --blue-deep:#0a4f86; --blue-soft:#e3f0fc; --blue-ink:#084d82;
+    --console:#0b1a2e; --console-2:#102740; --console-line:#24466b; --console-text:#d9e9fa; --console-dim:#87a6c6;
+    --green:#137a3f; --green-bg:#e2f5e8; --amber:#9a6206; --amber-bg:#fdf0d3;
+    --red:#bc2f2f; --red-bg:#fde7e7;
+    --seg1:#0078d4; --seg2:#d97706; --seg3:#0e9f6e; --seg4:#7c5cd6;
+    --shadow:0 18px 50px rgba(10,45,85,.13), 0 3px 10px rgba(10,45,85,.07);
+    --shadow-sm:0 4px 16px rgba(10,45,85,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#070f1b; --bg-grid:rgba(120,180,240,.05);
+      --surface:#0f1d31; --surface-2:#13263f; --surface-3:#1a3354;
+      --ink:#edf4fd; --muted:#a5b9d1; --faint:#748dab;
+      --line:#20395a; --line-2:#2d4d79;
+      --blue:#4da9ec; --blue-deep:#1b6db3; --blue-soft:#122f4f; --blue-ink:#bcdcf8;
+      --green-bg:#0a2e1a; --amber-bg:#3a2703; --red-bg:#3d1010;
+      --shadow:0 18px 50px rgba(0,0,0,.5), 0 3px 10px rgba(0,0,0,.4);
+      --shadow-sm:0 4px 16px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    background:
+      linear-gradient(var(--bg-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+      var(--bg);
+    background-size:34px 34px, 34px 34px, auto;
+    color:var(--ink); line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{cursor:pointer}
+  code,.mono{font-family:"Cascadia Code","JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace}
+  .hidden{display:none !important}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+  /* ============ CONNECT VIEW ============ */
+  .wrap{max-width:1120px;margin:0 auto;padding:26px 18px 60px}
+  .toprow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .live-dot{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  .live-dot i{width:8px;height:8px;border-radius:50%;background:#22b573;display:block;box-shadow:0 0 0 0 rgba(34,181,115,.5);animation:pulse 2.2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,181,115,.45)}70%{box-shadow:0 0 0 9px rgba(34,181,115,0)}100%{box-shadow:0 0 0 0 rgba(34,181,115,0)}}
+  @media (prefers-reduced-motion: reduce){.live-dot i{animation:none}}
+  .toprow .spacer{flex:1}
+  .pilltag{font-size:12px;font-weight:700;padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--muted)}
+  .pilltag b{color:var(--ink)}
+  .hero{margin:30px 0 22px;max-width:760px}
+  .hero h1{font-size:clamp(34px,5.4vw,54px);line-height:1.03;letter-spacing:-.032em;margin:0 0 14px;font-weight:800}
+  .hero h1 .hl{color:var(--blue);white-space:nowrap}
+  .hero p{font-size:17px;color:var(--muted);margin:0;max-width:620px}
+  .hero p b{color:var(--ink)}
+
+  /* Paste console */
+  .console{background:var(--console);border:1px solid var(--console-line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;color:var(--console-text)}
+  .console-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--console-line);background:var(--console-2);flex-wrap:wrap}
+  .console-bar .dots{display:flex;gap:6px}
+  .console-bar .dots i{width:11px;height:11px;border-radius:50%;display:block}
+  .console-bar .dots i:nth-child(1){background:#e5534b}.console-bar .dots i:nth-child(2){background:#d9a13b}.console-bar .dots i:nth-child(3){background:#3fb97c}
+  .console-bar strong{font-size:13px;letter-spacing:.04em}
+  .console-bar span{font-size:12px;color:var(--console-dim)}
+  .console-bar .cbtns{margin-left:auto;display:flex;gap:8px}
+  .cbtn{appearance:none;border:1px solid var(--console-line);background:transparent;color:var(--console-text);font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:8px}
+  .cbtn:hover{background:rgba(255,255,255,.07)}
+  .console-body{padding:16px}
+  .console label{display:block;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--console-dim);margin-bottom:9px}
+  #pasteInput{
+    width:100%;min-height:118px;resize:vertical;border:1.5px solid var(--console-line);border-radius:10px;
+    background:#081426;color:#eaf3fe;padding:13px 14px;font-size:13px;line-height:1.6;word-break:break-all;outline:none;
+    font-family:"Cascadia Code","JetBrains Mono",ui-monospace,Consolas,monospace;
+  }
+  #pasteInput:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,120,212,.35)}
+  #pasteInput::placeholder{color:#5f7c9d}
+  /* format segments */
+  .segments{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:14px;border:1px solid var(--console-line);border-radius:10px;overflow:hidden}
+  @media(max-width:640px){.segments{grid-template-columns:1fr 1fr}}
+  .seg{padding:10px 12px;background:rgba(255,255,255,.025);border-right:1px solid var(--console-line);min-width:0}
+  .seg:last-child{border-right:0}
+  .seg .seg-top{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:800;letter-spacing:.03em}
+  .seg .dot{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
+  .seg .seg-val{font-size:11.5px;color:var(--console-dim);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Consolas,monospace}
+  .seg .seg-state{font-size:11px;font-weight:700;margin-top:2px;color:var(--console-dim)}
+  .seg.ok .seg-state{color:#4ade80}.seg.bad .seg-state{color:#f87171}
+  .parse-note{margin-top:11px;font-size:13px;color:var(--console-dim);display:flex;gap:8px;align-items:flex-start}
+  .parse-note b{color:var(--console-text)}
+  .multi-list{margin-top:10px;display:grid;gap:6px}
+  .multi-item{display:flex;align-items:center;gap:9px;background:rgba(255,255,255,.04);border:1px solid var(--console-line);border-radius:8px;padding:8px 11px;font-size:13px}
+  .multi-item .m-ava{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800;flex:0 0 26px}
+  .multi-item .m-email{font-weight:700;word-break:break-all}
+  .multi-item .m-tag{margin-left:auto;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:rgba(74,222,128,.15);color:#4ade80;flex:0 0 auto}
+  .multi-item.invalid .m-tag{background:rgba(248,113,113,.15);color:#f87171}
+  .console-foot{display:flex;gap:10px;align-items:center;padding:14px 16px;border-top:1px solid var(--console-line);background:var(--console-2);flex-wrap:wrap}
+  .opt{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--console-dim)}
+  .opt select{background:#081426;color:var(--console-text);border:1px solid var(--console-line);border-radius:8px;padding:7px 9px;font-size:13px;font-weight:600}
+  .btn-fetch{
+    margin-left:auto;appearance:none;border:0;border-radius:10px;background:var(--blue);color:#fff;
+    font-weight:800;font-size:15px;padding:13px 26px;display:inline-flex;align-items:center;gap:10px;transition:background .15s, transform .1s;
+  }
+  .btn-fetch:hover:not(:disabled){background:#0b8ae0}
+  .btn-fetch:active:not(:disabled){transform:translateY(1px)}
+  .btn-fetch:disabled{opacity:.45;cursor:not-allowed}
+  .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none;flex:0 0 16px}
+  .is-loading .spinner{display:block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* progress steps */
+  .steps{display:none;gap:8px;padding:14px 16px 4px;flex-wrap:wrap}
+  .steps.show{display:flex}
+  .step{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--console-dim);border:1px solid var(--console-line);padding:7px 12px;border-radius:999px}
+  .step .n{width:19px;height:19px;border-radius:50%;border:1.5px solid currentColor;display:grid;place-items:center;font-size:11px;flex:0 0 19px}
+  .step.active{color:#fff;border-color:var(--blue);background:rgba(0,120,212,.25)}
+  .step.done{color:#4ade80;border-color:rgba(74,222,128,.4)}
+  .step.failed{color:#f87171;border-color:rgba(248,113,113,.4)}
+  .console-err{display:none;margin:12px 16px 16px;background:rgba(188,47,47,.16);border:1px solid rgba(248,113,113,.45);color:#fecaca;border-radius:10px;padding:12px 14px;font-size:13.5px;line-height:1.5}
+  .console-err.show{display:block}
+  .console-err b{color:#fff}
+
+  /* trust row */
+  .trust{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+  @media(max-width:820px){.trust{grid-template-columns:1fr}}
+  .trust .t{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 16px;display:flex;gap:12px;box-shadow:var(--shadow-sm)}
+  .trust .ic{width:36px;height:36px;flex:0 0 36px;border-radius:9px;background:var(--blue-soft);display:grid;place-items:center;color:var(--blue)}
+  .trust h3{margin:0 0 3px;font-size:14px}
+  .trust p{margin:0;font-size:13px;color:var(--muted)}
+  .trust code{font-size:11.5px;background:var(--surface-2);border:1px solid var(--line);padding:0 4px;border-radius:5px}
+
+  /* how + deploy */
+  .below{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-top:14px}
+  @media(max-width:820px){.below{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:var(--shadow-sm)}
+  .panel h2{margin:0 0 4px;font-size:16px;letter-spacing:-.01em}
+  .panel .sub{margin:0 0 14px;font-size:13.5px;color:var(--muted)}
+  .flowline{display:grid;gap:0}
+  .frow{display:flex;gap:13px}
+  .frow .rail{display:flex;flex-direction:column;align-items:center}
+  .frow .ball{width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:800}
+  .frow .stem{width:2px;flex:1;background:var(--line-2);margin:3px 0}
+  .frow:last-child .stem{display:none}
+  .frow .ftext{padding-bottom:16px}
+  .frow:last-child .ftext{padding-bottom:0}
+  .frow strong{display:block;font-size:14px}
+  .frow span{font-size:13px;color:var(--muted);display:block;margin-top:1px}
+  .frow code{font-size:11.5px;background:var(--surface-2);border:1px solid var(--line);padding:0 4px;border-radius:5px;word-break:break-all}
+  .deploy-steps{margin:0;padding-left:19px;font-size:13.5px;color:var(--muted);display:grid;gap:7px}
+  .deploy-steps b{color:var(--ink)}
+  .deploy-steps code{font-size:12px;background:var(--surface-2);border:1px solid var(--line);padding:0 5px;border-radius:5px}
+  .btn-dl{margin-top:14px;appearance:none;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);font-weight:700;font-size:13.5px;padding:10px 14px;border-radius:9px;display:inline-flex;gap:8px;align-items:center}
+  .btn-dl:hover{background:var(--surface-3)}
+  .foot-note{margin-top:20px;text-align:center;font-size:12.5px;color:var(--faint);line-height:1.7}
+
+  /* ============ APP VIEW ============ */
+  .app{display:flex;flex-direction:column;height:100dvh;background:var(--bg)}
+  .app-bar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .acct-chip{display:flex;align-items:center;gap:10px;min-width:0}
+  .acct-chip .ava{width:38px;height:38px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:800;font-size:14px;flex:0 0 38px}
+  .acct-chip strong{display:block;font-size:14px;line-height:1.25;word-break:break-all}
+  .acct-chip span{display:block;font-size:12px;color:var(--muted)}
+  .acct-chip span b{color:var(--green)}
+  .app-bar .searchbox{flex:1;min-width:180px;display:flex;gap:8px;max-width:560px;margin:0 auto}
+  .app-bar input[type=search]{flex:1;padding:10px 13px;border:1.5px solid var(--line-2);border-radius:9px;background:var(--surface);outline:none;font-size:14px;min-width:0}
+  .app-bar input[type=search]:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,120,212,.18)}
+  .abtn{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-weight:700;font-size:13px;padding:9px 13px;border-radius:9px;display:inline-flex;gap:7px;align-items:center;white-space:nowrap}
+  .abtn:hover{background:var(--surface-3)}
+  .abtn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .abtn.primary:hover{background:var(--blue-deep)}
+  .abtn.danger{background:var(--red-bg);color:var(--red);border-color:transparent}
+  .abtn:disabled{opacity:.5;cursor:not-allowed}
+  .app-main{flex:1;display:grid;grid-template-columns:218px 372px 1fr;min-height:0}
+  @media(max-width:1020px){.app-main{grid-template-columns:372px 1fr}.side{display:none}}
+  @media(max-width:720px){.app-main{grid-template-columns:1fr}.reader{display:none}.reader.open{display:block;position:fixed;inset:0;z-index:30;background:var(--surface)}}
+  /* sidebar */
+  .side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;overflow:auto}
+  .side h4{margin:14px 8px 7px;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+  .side h4:first-child{margin-top:2px}
+  .folder{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:0;border-radius:8px;padding:9px 10px;font-size:14px;font-weight:600;color:var(--ink)}
+  .folder svg{color:var(--muted);flex:0 0 17px}
+  .folder:hover{background:var(--surface-2)}
+  .folder.active{background:var(--blue-soft);color:var(--blue-ink)}
+  .folder.active svg{color:var(--blue)}
+  .folder .cnt{margin-left:auto;font-size:11.5px;font-weight:800;background:var(--surface-3);border-radius:999px;padding:1px 8px;color:var(--muted)}
+  .folder.active .cnt{background:var(--surface);color:var(--blue-ink)}
+  .side-acct{display:flex;gap:9px;align-items:center;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:9px;padding:8px;font-size:13px}
+  .side-acct:hover{background:var(--surface-2)}
+  .side-acct.active{border-color:var(--line);background:var(--surface-2)}
+  .side-acct .ava{width:30px;height:30px;border-radius:50%;background:var(--surface-3);display:grid;place-items:center;font-size:11px;font-weight:800;flex:0 0 30px;color:var(--blue-ink)}
+  .side-acct.active .ava{background:var(--blue);color:#fff}
+  .side-acct .em{font-weight:700;word-break:break-all;line-height:1.3}
+  .side-acct .st{font-size:11.5px;color:var(--muted)}
+  .side-acct .st b{color:var(--green)}
+  .session-card{margin:14px 4px 4px;border:1px dashed var(--line-2);border-radius:10px;padding:11px 12px;font-size:12.5px;color:var(--muted);line-height:1.5}
+  .session-card b{color:var(--ink)}
+  /* list column */
+  .listcol{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .list-head{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .list-head h2{margin:0;font-size:16px}
+  .list-head .meta{font-size:12.5px;color:var(--muted)}
+  .list-head .right{margin-left:auto;display:flex;gap:10px;align-items:center}
+  .chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer}
+  .chk input{width:16px;height:16px;accent-color:var(--blue)}
+  .folder-pills{display:none;gap:7px;padding:10px 12px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+  .folder-pills::-webkit-scrollbar{display:none}
+  @media(max-width:1020px){.folder-pills{display:flex}}
+  .fpill{flex:0 0 auto;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700}
+  .fpill.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .mlist{flex:1;overflow:auto;min-height:0}
+  .mail-item{width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);padding:12px 14px;display:block;color:var(--ink);position:relative}
+  .mail-item:hover{background:var(--surface-2)}
+  .mail-item.active{background:var(--blue-soft)}
+  .mail-item.active::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
+  .mi-top{display:flex;align-items:center;gap:8px}
+  .mi-ava{width:31px;height:31px;border-radius:50%;background:var(--surface-3);color:var(--blue-ink);display:grid;place-items:center;font-size:11.5px;font-weight:800;flex:0 0 31px}
+  .mi-from{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+  .mi-date{font-size:11.5px;color:var(--faint);white-space:nowrap}
+  .mi-subj{font-size:13.5px;font-weight:550;margin:5px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mi-prev{font-size:12.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .unread .mi-from,.unread .mi-subj{font-weight:800}
+  .udot{width:8px;height:8px;border-radius:50%;background:var(--blue);flex:0 0 8px}
+  .mtags{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .mtag{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted)}
+  .mtag.imp{background:var(--red-bg);color:var(--red);border-color:transparent}
+  .loadmore{padding:12px;border-top:1px solid var(--line)}
+  .loadmore button{width:100%}
+  .skel{padding:14px;border-bottom:1px solid var(--line)}
+  .skel i{display:block;height:12px;border-radius:6px;background:var(--surface-3);margin-bottom:9px;animation:sk 1.1s ease-in-out infinite alternate}
+  @keyframes sk{from{opacity:.45}to{opacity:1}}
+  @media (prefers-reduced-motion: reduce){.skel i{animation:none}}
+  .empty{padding:46px 22px;text-align:center;color:var(--muted)}
+  .empty .eic{width:54px;height:54px;border-radius:14px;background:var(--blue-soft);display:grid;place-items:center;margin:0 auto 12px;color:var(--blue)}
+  .empty h3{color:var(--ink);margin:0 0 6px;font-size:16px}
+  .empty p{margin:0 auto;max-width:400px;font-size:13.5px}
+  /* reader */
+  .reader{overflow:auto;min-height:0;background:var(--surface);padding:22px 26px 40px}
+  @media(max-width:720px){.reader{padding:16px}}
+  .reader .backbtn{display:none;margin-bottom:12px}
+  @media(max-width:720px){.reader .backbtn{display:inline-flex}}
+  .reader h2{font-size:21px;line-height:1.3;margin:10px 0 12px;letter-spacing:-.015em}
+  .rmeta{display:flex;gap:12px;padding-bottom:15px;border-bottom:1px solid var(--line);margin-bottom:16px}
+  .rmeta .ava{width:42px;height:42px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:800;flex:0 0 42px}
+  .rmeta .who{min-width:0;flex:1;font-size:13px;color:var(--muted);line-height:1.5}
+  .rmeta .who b{color:var(--ink);font-size:14px}
+  .rmeta .when{font-size:12.5px;color:var(--faint);white-space:nowrap;text-align:right}
+  .attach-row{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px}
+  .attach{display:inline-flex;gap:7px;align-items:center;font-size:12.5px;font-weight:600;border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:7px 11px}
+  .body-html{font-size:14.5px;line-height:1.65;word-break:break-word}
+  .body-html img{max-width:100%;height:auto}
+  .body-text{white-space:pre-wrap;font-size:14.5px;line-height:1.65;font-family:inherit}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(16px);background:#101f33;color:#fff;padding:11px 16px;border-radius:999px;font-size:13.5px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:80;max-width:calc(100vw - 32px);text-align:center;box-shadow:0 12px 32px rgba(0,0,0,.3)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ================= CONNECT VIEW ================= -->
+<div id="connectView">
+<div class="wrap">
+  <div class="toprow">
+    <span class="live-dot"><i></i> Session only — nothing stored</span>
+    <span class="spacer"></span>
+    <span class="pilltag">Format <b>email | password | refresh_token | client_id</b></span>
+    <span class="pilltag">Single file — <b>Vercel / GitHub Pages ready</b></span>
+  </div>
+
+  <header class="hero">
+    <h1>Paste one line.<br/>Read the <span class="hl">whole inbox.</span></h1>
+    <p>Drop in an account line, and this page exchanges the <b>refresh token</b> directly with Microsoft, pulls mail from the <b>Graph API</b>, and renders a full inbox — all in your browser. No server, no database, nothing left behind when the tab closes.</p>
+  </header>
+
+  <!-- PASTE CONSOLE -->
+  <section class="console" aria-label="Account input">
+    <div class="console-bar">
+      <span class="dots"><i></i><i></i><i></i></span>
+      <strong>ACCOUNT LINE</strong>
+      <span>one box — that's all it takes</span>
+      <span class="cbtns">
+        <button class="cbtn" id="pasteBtn" type="button">Paste from clipboard</button>
+        <button class="cbtn" id="clearBtn" type="button">Clear</button>
+      </span>
+    </div>
+
+    <div class="steps" id="stepsBar">
+      <span class="step" id="step1"><span class="n">1</span> Exchange refresh token</span>
+      <span class="step" id="step2"><span class="n">2</span> Load profile</span>
+      <span class="step" id="step3"><span class="n">3</span> Fetch inbox</span>
+    </div>
+
+    <div class="console-body">
+      <label for="pasteInput">Paste your account line here</label>
+      <textarea id="pasteInput" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="you@hotmail.com|yourpassword|M.C5xx…refresh_token…|xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></textarea>
+
+      <div class="segments" id="segments">
+        <div class="seg" id="segEmail">
+          <div class="seg-top"><span class="dot" style="background:var(--seg1)"></span> 1 · EMAIL</div>
+          <div class="seg-val">—</div><div class="seg-state">waiting…</div>
+        </div>
+        <div class="seg" id="segPass">
+          <div class="seg-top"><span class="dot" style="background:var(--seg2)"></span> 2 · PASSWORD</div>
+          <div class="seg-val">—</div><div class="seg-state">waiting…</div>
+        </div>
+        <div class="seg" id="segToken">
+          <div class="seg-top"><span class="dot" style="background:var(--seg3)"></span> 3 · REFRESH TOKEN</div>
+          <div class="seg-val">—</div><div class="seg-state">waiting…</div>
+        </div>
+        <div class="seg" id="segClient">
+          <div class="seg-top"><span class="dot" style="background:var(--seg4)"></span> 4 · CLIENT ID</div>
+          <div class="seg-val">—</div><div class="seg-state">waiting…</div>
+        </div>
+      </div>
+
+      <div class="multi-list" id="multiList"></div>
+
+      <p class="parse-note" id="parseNote"><span aria-hidden="true">→</span><span>Paste a line and watch it split into its four parts above. <b>Multiple accounts?</b> Paste one line per account — you can switch between them inside the inbox.</span></p>
+    </div>
+
+    <div class="console-err" id="consoleErr" role="alert"></div>
+
+    <div class="console-foot">
+      <label class="opt">Open
+        <select id="optFolder">
+          <option value="inbox" selected>Inbox</option>
+          <option value="junkemail">Junk Email</option>
+          <option value="sentitems">Sent Items</option>
+          <option value="archive">Archive</option>
+          <option value="deleteditems">Deleted Items</option>
+          <option value="drafts">Drafts</option>
+        </select>
+      </label>
+      <label class="opt">Load
+        <select id="optPageSize">
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+        </select>
+        emails
+      </label>
+      <button class="btn-fetch" id="connectBtn" type="button" disabled>
+        <span class="spinner"></span><span id="connectLabel">Fetch my emails</span>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <!-- TRUST -->
+  <section class="trust">
+    <div class="t">
+      <span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+      <div><h3>Password never leaves the page</h3><p>It's parsed only to validate the format. Sign-in happens with the refresh token — the password is never sent to Microsoft or anywhere else.</p></div>
+    </div>
+    <div class="t">
+      <span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11L9.5 22 19 10h-6.5L13 2z"/></svg></span>
+      <div><h3>Straight to Microsoft, no middleman</h3><p>The only requests are to <code>login.microsoftonline.com</code> for the token exchange and <code>graph.microsoft.com</code> for mail. No proxy, no relay.</p></div>
+    </div>
+    <div class="t">
+      <span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6"/></svg></span>
+      <div><h3>Zero storage, by design</h3><p>No <code>localStorage</code>, no cookies, no database. Credentials and mail live in page memory only — close the tab and they're gone.</p></div>
+    </div>
+  </section>
+
+  <!-- HOW + DEPLOY -->
+  <div class="below">
+    <section class="panel">
+      <h2>How the fetch actually works</h2>
+      <p class="sub">The refresh-token grant is the same flow desktop mail clients use — done here entirely client-side.</p>
+      <div class="flowline">
+        <div class="frow"><div class="rail"><span class="ball">1</span><span class="stem"></span></div><div class="ftext"><strong>Parse the line</strong><span>Split on <code>|</code> into email, password, refresh token, and client ID — validated live as you paste.</span></div></div>
+        <div class="frow"><div class="rail"><span class="ball">2</span><span class="stem"></span></div><div class="ftext"><strong>Exchange for an access token</strong><span><code>POST login.microsoftonline.com/common/oauth2/v2.0/token</code> with <code>grant_type=refresh_token</code> and scopes <code>Mail.Read</code> + <code>User.Read</code>. Tokens typically live ~60 minutes; if Microsoft rotates the refresh token, the new one is kept in memory.</span></div></div>
+        <div class="frow"><div class="rail"><span class="ball">3</span><span class="stem"></span></div><div class="ftext"><strong>Read mail from Graph</strong><span><code>GET graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages</code> for the list, and <code>/me/messages/{id}</code> for full bodies — HTML is sanitized with DOMPurify before it renders.</span></div></div>
+        <div class="frow"><div class="rail"><span class="ball">4</span></div><div class="ftext"><strong>Close the tab — it's all gone</strong><span>Access token, refresh token, and every loaded email exist only in JavaScript variables. The Wipe button in the inbox does the same thing on demand.</span></div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Publish it anywhere</h2>
+      <p class="sub">This is one self-contained <code>index.html</code> — no build step, no environment variables, no backend to configure.</p>
+      <ol class="deploy-steps">
+        <li><b>GitHub:</b> create a repo, add this file as <code>index.html</code>, commit &amp; push.</li>
+        <li><b>Vercel:</b> <i>New Project → Import</i> that repo. Framework preset: <b>Other</b>. No build command, output is the repo root. Deploy.</li>
+        <li><b>Anywhere else:</b> the same file works on Netlify Drop, Cloudflare Pages, GitHub Pages, or any static host.</li>
+        <li>Open your URL, paste a line, fetch. It behaves identically everywhere because everything runs in the visitor's browser.</li>
+      </ol>
+      <button class="btn-dl" id="downloadBtn" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+        Download this page as index.html
+      </button>
+    </section>
+  </div>
+
+  <p class="foot-note">Works with Outlook.com, Hotmail, and Live accounts whose refresh token was issued for the supplied client ID.<br/>If a token has expired or been revoked in the Microsoft account, Microsoft will reject the exchange — the error is shown here in plain language.</p>
+</div>
+</div>
+
+<!-- ================= APP VIEW ================= -->
+<div id="appView" class="app hidden">
+  <div class="app-bar">
+    <div class="acct-chip">
+      <span class="ava" id="barAvatar">?</span>
+      <div style="min-width:0">
+        <strong id="barEmail">—</strong>
+        <span id="barMeta">Connected · token <b id="barExpiry">—</b></span>
+      </div>
+    </div>
+    <div class="searchbox">
+      <input type="search" id="searchInput" placeholder="Search mail…  ( / )" aria-label="Search mail" />
+      <button class="abtn primary" id="searchBtn" type="button">Search</button>
+    </div>
+    <button class="abtn" id="refreshBtn" type="button">↻ Refresh</button>
+    <button class="abtn" id="addAcctBtn" type="button">+ Add account</button>
+    <button class="abtn danger" id="wipeBtn" type="button">Wipe session</button>
+  </div>
+
+  <div class="app-main">
+    <!-- SIDEBAR -->
+    <aside class="side">
+      <h4>Folders</h4>
+      <div id="folderList"></div>
+      <h4 id="acctsHead">Accounts</h4>
+      <div id="sideAccts"></div>
+      <div class="session-card"><b>Session only.</b><br/>Tokens and mail are held in memory. Close this tab — or hit <b>Wipe session</b> — and everything is erased.</div>
+    </aside>
+
+    <!-- LIST -->
+    <section class="listcol">
+      <div class="folder-pills" id="folderPills"></div>
+      <div class="list-head">
+        <h2 id="listTitle">Inbox</h2>
+        <span class="meta" id="listMeta">—</span>
+        <span class="right">
+          <label class="chk"><input type="checkbox" id="unreadOnly" /> Unread only</label>
+        </span>
+      </div>
+      <div class="mlist" id="mailList"></div>
+      <div class="loadmore hidden" id="loadMoreWrap">
+        <button class="abtn" id="loadMoreBtn" type="button" style="justify-content:center">Load more emails</button>
+      </div>
+    </section>
+
+    <!-- READER -->
+    <article class="reader" id="reader">
+      <div class="empty" style="padding-top:90px">
+        <span class="eic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span>
+        <h3>Select an email to read it</h3>
+        <p>The full body is fetched on demand from Microsoft Graph and sanitized before rendering. Press <b>R</b> to refresh, <b>/</b> to search.</p>
+      </div>
+    </article>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var TOKEN_ENDPOINTS = [
+    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
+  ];
+  var GRAPH = "https://graph.microsoft.com/v1.0";
+  var FOLDERS = [
+    {id:"inbox", label:"Inbox", icon:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z"/>'},
+    {id:"junkemail", label:"Junk Email", icon:'<circle cx="12" cy="12" r="9"/><path d="m5.5 5.5 13 13"/>'},
+    {id:"drafts", label:"Drafts", icon:'<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>'},
+    {id:"sentitems", label:"Sent Items", icon:'<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>'},
+    {id:"archive", label:"Archive", icon:'<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>'},
+    {id:"deleteditems", label:"Deleted Items", icon:'<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6"/>'}
+  ];
+
+  /* ---------- state (memory only — never persisted) ---------- */
+  var accounts = [];          // {email,password,refreshToken,clientId,accessToken,expiresAt,displayName,status,error}
+  var activeIdx = -1;
+  var messages = [];
+  var nextLink = null;
+  var selectedId = null;
+  var currentFolder = "inbox";
+  var busy = false;
+  var expiryTimer = null;
+
+  var $ = function(id){ return document.getElementById(id); };
+  var els = {
+    connectView:$("connectView"), appView:$("appView"),
+    pasteInput:$("pasteInput"), pasteBtn:$("pasteBtn"), clearBtn:$("clearBtn"),
+    connectBtn:$("connectBtn"), connectLabel:$("connectLabel"),
+    optFolder:$("optFolder"), optPageSize:$("optPageSize"),
+    segs:{ email:$("segEmail"), pass:$("segPass"), token:$("segToken"), client:$("segClient") },
+    multiList:$("multiList"), parseNote:$("parseNote"),
+    stepsBar:$("stepsBar"), steps:[$("step1"),$("step2"),$("step3")],
+    consoleErr:$("consoleErr"), downloadBtn:$("downloadBtn"),
+    barAvatar:$("barAvatar"), barEmail:$("barEmail"), barExpiry:$("barExpiry"),
+    searchInput:$("searchInput"), searchBtn:$("searchBtn"), refreshBtn:$("refreshBtn"),
+    addAcctBtn:$("addAcctBtn"), wipeBtn:$("wipeBtn"),
+    folderList:$("folderList"), folderPills:$("folderPills"), sideAccts:$("sideAccts"), acctsHead:$("acctsHead"),
+    listTitle:$("listTitle"), listMeta:$("listMeta"), unreadOnly:$("unreadOnly"),
+    mailList:$("mailList"), loadMoreWrap:$("loadMoreWrap"), loadMoreBtn:$("loadMoreBtn"),
+    reader:$("reader"), toast:$("toast")
+  };
+
+  /* ---------- helpers ---------- */
+  function esc(s){
+    if(s==null) return "";
+    return String(s).replace(/[&<>"']/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; });
+  }
+  function initials(name){
+    if(!name) return "?";
+    var base = String(name).indexOf("@")>-1 ? String(name).split("@")[0] : String(name);
+    var p = base.replace(/[._-]+/g," ").trim().split(/\s+/);
+    return (((p[0]||"?")[0]||"?") + (p.length>1 ? (p[p.length-1][0]||"") : "")).toUpperCase();
+  }
+  function fmtDate(iso){
+    if(!iso) return "";
+    var d=new Date(iso), now=new Date();
+    if(d.toDateString()===now.toDateString()) return d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+    var y=new Date(now); y.setDate(now.getDate()-1);
+    if(d.toDateString()===y.toDateString()) return "Yesterday";
+    if(d.getFullYear()===now.getFullYear()) return d.toLocaleDateString([], {month:"short",day:"numeric"});
+    return d.toLocaleDateString([], {month:"short",day:"numeric",year:"numeric"});
+  }
+  function fmtFull(iso){
+    if(!iso) return "—";
+    return new Date(iso).toLocaleString([], {weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
+  }
+  function toast(msg){
+    els.toast.textContent = msg;
+    els.toast.classList.add("show");
+    setTimeout(function(){ els.toast.classList.remove("show"); }, 3200);
+  }
+  function folderLabel(id){
+    for(var i=0;i<FOLDERS.length;i++) if(FOLDERS[i].id===id) return FOLDERS[i].label;
+    return id;
+  }
+  function activeAccount(){ return activeIdx>=0 ? accounts[activeIdx] : null; }
+
+  /* ---------- parsing: email|password|refresh_token|client_id ---------- */
+  function parseLine(line){
+    var parts = String(line).split("|").map(function(s){ return s.trim(); });
+    if(parts.length < 4) return { ok:false, reason:"needs 4 parts separated by | — found " + parts.length, parts:parts };
+    var acct = {
+      email: parts[0],
+      password: parts[1],
+      // refresh token is everything between password and the final client_id,
+      // so a token that itself contains "|" still survives intact
+      refreshToken: parts.slice(2, parts.length-1).join("|"),
+      clientId: parts[parts.length-1]
+    };
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(acct.email)) return { ok:false, reason:"first part doesn't look like an email address", acct:acct };
+    if(!acct.password) return { ok:false, reason:"password part is empty", acct:acct };
+    if(acct.refreshToken.length < 20) return { ok:false, reason:"refresh token looks too short (" + acct.refreshToken.length + " chars)", acct:acct };
+    if(!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(acct.clientId))
+      return { ok:false, reason:"client ID isn't a GUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)", acct:acct };
+    return { ok:true, acct:acct };
+  }
+  function parseAll(text){
+    return String(text||"").split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean)
+      .map(function(l){ return parseLine(l); });
+  }
+
+  function setSeg(el, value, state, cls){
+    el.querySelector(".seg-val").textContent = value || "—";
+    el.querySelector(".seg-state").textContent = state;
+    el.classList.remove("ok","bad");
+    if(cls) el.classList.add(cls);
+  }
+  function renderParse(){
+    var text = els.pasteInput.value;
+    var results = parseAll(text);
+    var first = results.length ? (results[0].acct || { }) : null;
+    var rawFirst = text.split(/\r?\n/).filter(function(l){ return l.trim(); })[0] || "";
+    var rawParts = rawFirst ? rawFirst.split("|") : [];
+    if(!text.trim()){
+      setSeg(els.segs.email,"","waiting…"); setSeg(els.segs.pass,"","waiting…");
+      setSeg(els.segs.token,"","waiting…"); setSeg(els.segs.client,"","waiting…");
+    } else {
+      var e = rawParts[0] ? rawParts[0].trim() : "";
+      var p = rawParts.length>1 ? rawParts[1] : "";
+      var t = rawParts.length>2 ? rawParts.slice(2, rawParts.length-1).join("|").trim() : "";
+      var c = rawParts.length>3 ? rawParts[rawParts.length-1].trim() : "";
+      var okE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+      setSeg(els.segs.email, e || "—", !e ? "missing" : (okE ? "looks valid" : "doesn't look like an email"), !e ? "bad" : (okE ? "ok" : "bad"));
+      setSeg(els.segs.pass, p ? "•••••••• (" + p.length + " chars)" : "—", p ? "present — never sent anywhere" : "missing", p ? "ok" : "bad");
+      setSeg(els.segs.token, t ? t.slice(0,14) + "… (" + t.length + " chars)" : "—", !t ? "missing" : (t.length>=20 ? "present" : "suspiciously short"), t.length>=20 ? "ok" : "bad");
+      setSeg(els.segs.client, c || "—", !c ? "missing" : (/^[0-9a-fA-F-]{36}$/.test(c) ? "GUID format ✓" : "should be a GUID"), /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(c) ? "ok" : "bad");
+    }
+    // multi-account preview
+    if(results.length > 1){
+      els.multiList.innerHTML = results.map(function(r, i){
+        if(r.ok) return '<div class="multi-item"><span class="m-ava">' + esc(initials(r.acct.email)) + '</span><span class="m-email">' + esc(r.acct.email) + '</span><span class="m-tag">READY</span></div>';
+        return '<div class="multi-item invalid"><span class="m-ava">!</span><span class="m-email">Line ' + (i+1) + ' — ' + esc(r.reason) + '</span><span class="m-tag">INVALID</span></div>';
+      }).join("");
+    } else { els.multiList.innerHTML = ""; }
+    var validCount = results.filter(function(r){ return r.ok; }).length;
+    els.connectBtn.disabled = busy || validCount===0;
+    els.connectLabel.textContent = busy ? "Working…" :
+      (validCount>1 ? "Fetch emails for " + validCount + " accounts" : "Fetch my emails");
+    if(results.length===1 && !results[0].ok){
+      els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span><b>Almost:</b> ' + esc(results[0].reason) + '. Format is <b>email|password|refresh_token|client_id</b> — no spaces around the pipes.</span>';
+    } else if(validCount>0){
+      els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span><b>' + validCount + ' account' + (validCount>1?"s":"") + ' ready.</b> The refresh token is exchanged directly with Microsoft — nothing passes through any other server.</span>';
+    } else {
+      els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span>Paste a line and watch it split into its four parts above. <b>Multiple accounts?</b> Paste one line per account — you can switch between them inside the inbox.</span>';
+    }
+    return results;
+  }
+
+  /* ---------- steps + errors ---------- */
+  function setStep(n, state){ // n: 0,1,2 ; state: "", "active", "done", "failed"
+    els.steps.forEach(function(s, i){
+      s.classList.remove("active","done","failed");
+      if(i < n) s.classList.add("done");
+      else if(i === n && state) s.classList.add(state);
+      if(i === n && state === "done") s.classList.add("done");
+    });
+  }
+  function showSteps(){ els.stepsBar.classList.add("show"); els.steps.forEach(function(s){ s.classList.remove("active","done","failed"); }); }
+  function hideErr(){ els.consoleErr.classList.remove("show"); els.consoleErr.innerHTML = ""; }
+  function showErr(html){ els.consoleErr.innerHTML = html; els.consoleErr.classList.add("show"); }
+
+  function friendlyTokenError(errCode, desc){
+    var d = String(desc || "");
+    if(/AADSTS700082|AADSTS70008|expired/i.test(d) || errCode==="invalid_grant" && /expired/i.test(d))
+      return "This refresh token has <b>expired</b>. Microsoft refresh tokens die after ~90 days of non-use or when the password changes. You need a fresh account line with a newly issued token.";
+    if(/AADSTS50173/i.test(d)) return "Microsoft <b>revoked this refresh token</b> (usually after a password change or a security event). A fresh token is required.";
+    if(/AADSTS70000|invalid_grant/i.test(d)) return "Microsoft rejected the refresh token (<b>invalid_grant</b>). It may be revoked, mistyped, or issued for a different client ID than the one in this line.";
+    if(/AADSTS70011|invalid scope/i.test(d)) return "The requested mail scope isn't allowed for this client ID. The token must have been issued with <b>Mail.Read</b> / Graph access.";
+    if(/invalid_client|AADSTS70002/i.test(d)) return "The <b>client ID</b> in this line wasn't accepted — it must be the same app the refresh token was issued to.";
+    if(/AADSTS50034|does not exist/i.test(d)) return "Microsoft says this <b>account doesn't exist</b> in that tenant. Check the email in the line.";
+    return null;
+  }
+
+  /* ---------- token exchange ---------- */
+  async function exchangeToken(acct){
+    var lastErr = null;
+    for(var i=0;i<TOKEN_ENDPOINTS.length;i++){
+      var body = new URLSearchParams();
+      body.set("client_id", acct.clientId);
+      body.set("grant_type", "refresh_token");
+      body.set("refresh_token", acct.refreshToken);
+      body.set("scope", "https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read offline_access");
+      try {
+        var res = await fetch(TOKEN_ENDPOINTS[i], {
+          method:"POST",
+          headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+          body: body.toString()
+        });
+        var data = null;
+        try { data = await res.json(); } catch(e){}
+        if(res.ok && data && data.access_token){
+          acct.accessToken = data.access_token;
+          acct.expiresAt = Date.now() + ((data.expires_in || 3600) * 1000);
+          if(data.refresh_token && data.refresh_token !== acct.refreshToken) acct.refreshToken = data.refresh_token; // rotation
+          acct.status = "connected"; acct.error = "";
+          return acct.accessToken;
+        }
+        lastErr = {
+          code: (data && data.error) || ("HTTP " + res.status),
+          desc: (data && (data.error_description || data.error)) || res.statusText
+        };
+        // endpoint retry only helps tenant-type mismatches; a hard invalid_grant is final
+        if(lastErr.code === "invalid_client") break;
+      } catch(netErr){
+        lastErr = { code:"network", desc:"Couldn't reach login.microsoftonline.com — check your connection. (" + (netErr.message || netErr) + ")" };
+      }
+    }
+    var err = new Error(lastErr ? (lastErr.code + ": " + lastErr.desc) : "Token exchange failed");
+    err.tokenError = lastErr;
+    throw err;
+  }
+  async function ensureToken(acct){
+    if(acct.accessToken && acct.expiresAt && Date.now() < acct.expiresAt - 60000) return acct.accessToken;
+    return exchangeToken(acct);
+  }
+
+  /* ---------- Graph ---------- */
+  async function graphFetch(acct, url, retried){
+    var token = await ensureToken(acct);
+    var headers = { "Authorization":"Bearer " + token, "Accept":"application/json" };
+    if(url.indexOf("$search")>-1) headers["ConsistencyLevel"] = "eventual";
+    var res = await fetch(url, { headers: headers });
+    if(res.status === 401 && !retried){
+      acct.accessToken = null; acct.expiresAt = 0;
+      return graphFetch(acct, url, true);
+    }
+    if(!res.ok){
+      var text = res.statusText;
+      try { var j = await res.json(); if(j.error) text = j.error.message || JSON.stringify(j.error); } catch(e){}
+      throw new Error("Graph " + res.status + ": " + text);
+    }
+    if(res.status === 204) return null;
+    return res.json();
+  }
+
+  /* ---------- connect flow ---------- */
+  function setBusy(b){
+    busy = b;
+    els.connectBtn.classList.toggle("is-loading", b);
+    renderParse();
+  }
+  async function connect(){
+    if(busy) return;
+    hideErr();
+    var results = parseAll(els.pasteInput.value);
+    var valid = results.filter(function(r){ return r.ok; });
+    if(!valid.length) return;
+    setBusy(true); showSteps();
+    var prevCount = addMode ? accounts.length : 0;
+    var fresh = valid.map(function(r){
+      return { email:r.acct.email, password:r.acct.password, refreshToken:r.acct.refreshToken, clientId:r.acct.clientId,
+               accessToken:null, expiresAt:0, displayName:"", status:"pending", error:"" };
+    });
+    accounts = addMode ? accounts.concat(fresh) : fresh;
+    var failures = [];
+    for(var i=prevCount;i<accounts.length;i++){
+      var acct = accounts[i];
+      try {
+        setStep(0, "active");
+        await exchangeToken(acct);
+        setStep(0, "done"); setStep(1, "active");
+        try {
+          var me = await graphFetch(acct, GRAPH + "/me?$select=displayName,mail,userPrincipalName");
+          if(me){
+            acct.displayName = me.displayName || "";
+            acct.email = me.mail || me.userPrincipalName || acct.email;
+          }
+        } catch(e){ /* profile is best-effort */ }
+        setStep(1, "done");
+        acct.status = "connected";
+      } catch(e2){
+        acct.status = "failed";
+        acct.error = e2.message || String(e2);
+        failures.push({ acct: acct, err: e2 });
+        setStep(0, "failed");
+      }
+    }
+    var firstOk = -1;
+    for(var k=prevCount;k<accounts.length;k++){ if(accounts[k].status==="connected"){ firstOk = k; break; } }
+    if(firstOk === -1 && addMode) firstOk = accounts.findIndex(function(a){ return a.status==="connected"; });
+    setBusy(false);
+    if(firstOk === -1){
+      var f = failures[0];
+      var friendly = f && f.err.tokenError ? friendlyTokenError(f.err.tokenError.code, f.err.tokenError.desc) : null;
+      showErr("<b>Couldn't sign in" + (accounts.length>1 ? " to any account" : "") + ".</b><br/>" +
+        (friendly || esc(f ? f.err.message : "Unknown error")) +
+        "<br/><span style='opacity:.85'>Account: " + esc(f ? f.acct.email : "") + " — the line was parsed correctly, so the problem is the token or client ID itself.</span>");
+      accounts = accounts.slice(0, prevCount);
+      if(addMode){ addMode = false; var cb = $("addCancelBtn"); if(cb) cb.classList.add("hidden"); }
+      return;
+    }
+    addMode = false;
+    var cancelBtnEl = $("addCancelBtn"); if(cancelBtnEl) cancelBtnEl.classList.add("hidden");
+    if(failures.length){
+      toast(failures.length + " account(s) failed — token expired or revoked. Others loaded fine.");
+    }
+    activeIdx = firstOk;
+    currentFolder = els.optFolder.value;
+    setStep(2, "active");
+    enterApp();
+    await loadMessages(true);
+    setStep(2, "done");
+    toast("Connected as " + activeAccount().email);
+  }
+
+  /* ---------- app chrome ---------- */
+  function enterApp(){
+    els.connectView.classList.add("hidden");
+    els.appView.classList.remove("hidden");
+    buildFolders(); renderSideAccts(); updateBar(); startExpiryTicker();
+    window.scrollTo(0,0);
+  }
+  function exitToConnect(){
+    els.appView.classList.add("hidden");
+    els.connectView.classList.remove("hidden");
+    window.scrollTo(0,0);
+  }
+  function updateBar(){
+    var a = activeAccount(); if(!a) return;
+    els.barAvatar.textContent = initials(a.displayName || a.email);
+    els.barEmail.textContent = a.email;
+    updateExpiryLabel();
+  }
+  function updateExpiryLabel(){
+    var a = activeAccount(); if(!a || !a.expiresAt) { els.barExpiry.textContent = "—"; return; }
+    var mins = Math.max(0, Math.round((a.expiresAt - Date.now())/60000));
+    els.barExpiry.textContent = mins > 1 ? ("valid ~" + mins + " min") : "expiring — refreshes automatically";
+  }
+  function startExpiryTicker(){
+    if(expiryTimer) clearInterval(expiryTimer);
+    expiryTimer = setInterval(updateExpiryLabel, 30000);
+  }
+  function buildFolders(){
+    els.folderList.innerHTML = FOLDERS.map(function(f){
+      return '<button type="button" class="folder' + (f.id===currentFolder ? " active" : "") + '" data-folder="' + f.id + '">' +
+        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + f.icon + '</svg>' +
+        esc(f.label) + '</button>';
+    }).join("");
+    els.folderPills.innerHTML = FOLDERS.map(function(f){
+      return '<button type="button" class="fpill' + (f.id===currentFolder ? " active" : "") + '" data-folder="' + f.id + '">' + esc(f.label) + '</button>';
+    }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll("[data-folder]"), function(btn){
+      btn.addEventListener("click", function(){
+        var f = btn.getAttribute("data-folder");
+        if(f === currentFolder) return;
+        currentFolder = f; selectedId = null; buildFolders();
+        els.searchInput.value = "";
+        loadMessages(true);
+      });
+    });
+    els.listTitle.textContent = folderLabel(currentFolder);
+  }
+  function renderSideAccts(){
+    els.acctsHead.style.display = accounts.length > 1 ? "" : "none";
+    els.sideAccts.innerHTML = accounts.map(function(a, i){
+      var st = a.status === "connected" ? "<b>Connected</b>" : (a.status === "failed" ? "Failed — token rejected" : "Pending");
+      return '<button type="button" class="side-acct' + (i===activeIdx ? " active" : "") + '" data-acct="' + i + '">' +
+        '<span class="ava">' + esc(initials(a.displayName || a.email)) + '</span>' +
+        '<span style="min-width:0"><span class="em">' + esc(a.email) + '</span><br/><span class="st">' + st + '</span></span></button>';
+    }).join("");
+    Array.prototype.forEach.call(els.sideAccts.querySelectorAll("[data-acct]"), function(btn){
+      btn.addEventListener("click", function(){ switchAccount(parseInt(btn.getAttribute("data-acct"), 10)); });
+    });
+  }
+  async function switchAccount(i){
+    if(i === activeIdx || !accounts[i]) return;
+    if(accounts[i].status !== "connected"){
+      try { await exchangeToken(accounts[i]); }
+      catch(e){ toast("That account's token was rejected: " + (e.message || e)); return; }
+    }
+    activeIdx = i; selectedId = null;
+    renderSideAccts(); updateBar(); renderReaderEmpty();
+    await loadMessages(true);
+  }
+
+  /* ---------- messages ---------- */
+  function buildMessagesUrl(first){
+    if(!first && nextLink) return nextLink;
+    var top = els.optPageSize.value;
+    var q = els.searchInput.value.trim();
+    var base = GRAPH + "/me/mailFolders/" + encodeURIComponent(currentFolder) + "/messages";
+    var params = ["$top=" + encodeURIComponent(top),
+      "$select=id,subject,bodyPreview,from,sender,receivedDateTime,isRead,hasAttachments,importance,categories"];
+    if(q){
+      params.push("$search=" + encodeURIComponent('"' + q.replace(/"/g, "") + '"'));
+      params.push("$count=true");
+    } else {
+      params.push("$orderby=receivedDateTime%20desc");
+      if(els.unreadOnly.checked) params.push("$filter=isRead%20eq%20false");
+    }
+    return base + "?" + params.join("&");
+  }
+  function renderSkeletons(){
+    var html = "";
+    for(var i=0;i<6;i++) html += '<div class="skel"><i style="width:55%"></i><i style="width:88%"></i><i style="width:72%;margin-bottom:0"></i></div>';
+    els.mailList.innerHTML = html;
+    els.listMeta.textContent = "Fetching from Microsoft Graph…";
+  }
+  async function loadMessages(reset){
+    var acct = activeAccount(); if(!acct) return;
+    try {
+      els.refreshBtn.disabled = true;
+      if(reset){ messages = []; nextLink = null; renderSkeletons(); }
+      var data = await graphFetch(acct, buildMessagesUrl(!!reset));
+      var items = (data && data.value) ? data.value : [];
+      if(els.searchInput.value.trim() && els.unreadOnly.checked)
+        items = items.filter(function(m){ return !m.isRead; });
+      messages = reset ? items : messages.concat(items);
+      nextLink = (data && data["@odata.nextLink"]) ? data["@odata.nextLink"] : null;
+      renderList();
+    } catch(e){
+      els.mailList.innerHTML = '<div class="empty"><span class="eic">!</span><h3>Couldn\'t fetch this folder</h3><p>' + esc(e.message || String(e)) + '</p></div>';
+      els.listMeta.textContent = "Fetch failed";
+    } finally { els.refreshBtn.disabled = false; }
+  }
+  function renderList(){
+    var unread = messages.filter(function(m){ return !m.isRead; }).length;
+    els.listMeta.textContent = messages.length + " loaded" + (unread ? " · " + unread + " unread" : "") +
+      (els.searchInput.value.trim() ? " · search: “" + els.searchInput.value.trim() + "”" : "");
+    els.loadMoreWrap.classList.toggle("hidden", !nextLink);
+    els.listTitle.textContent = folderLabel(currentFolder);
+    if(!messages.length){
+      els.mailList.innerHTML = '<div class="empty"><span class="eic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span><h3>Nothing here</h3><p>No messages in this view. Try another folder, clear the search, or hit Refresh.</p></div>';
+      return;
+    }
+    els.mailList.innerHTML = messages.map(function(m){
+      var fo = (m.from && m.from.emailAddress) || (m.sender && m.sender.emailAddress) || {};
+      var fromName = fo.name || fo.address || "Unknown sender";
+      var tags = "";
+      if(m.hasAttachments) tags += '<span class="mtag">Attachment</span>';
+      if(m.importance === "high") tags += '<span class="mtag imp">High importance</span>';
+      if(!m.isRead) tags += '<span class="mtag">Unread</span>';
+      (m.categories || []).forEach(function(c){ tags += '<span class="mtag">' + esc(c) + '</span>'; });
+      return '<button type="button" class="mail-item' + (m.id===selectedId ? " active" : "") + (!m.isRead ? " unread" : "") + '" data-id="' + esc(m.id) + '">' +
+        '<span class="mi-top">' + (!m.isRead ? '<span class="udot"></span>' : '') +
+        '<span class="mi-ava">' + esc(initials(fromName)) + '</span>' +
+        '<span class="mi-from">' + esc(fromName) + '</span>' +
+        '<span class="mi-date">' + esc(fmtDate(m.receivedDateTime)) + '</span></span>' +
+        '<span class="mi-subj">' + esc(m.subject || "(No subject)") + '</span>' +
+        '<span class="mi-prev">' + esc(m.bodyPreview || "") + '</span>' +
+        (tags ? '<span class="mtags">' + tags + '</span>' : '') + '</button>';
+    }).join("");
+    Array.prototype.forEach.call(els.mailList.querySelectorAll(".mail-item"), function(btn){
+      btn.addEventListener("click", function(){ openMessage(btn.getAttribute("data-id")); });
+    });
+  }
+
+  /* ---------- reader ---------- */
+  function renderReaderEmpty(){
+    els.reader.classList.remove("open");
+    els.reader.innerHTML = '<div class="empty" style="padding-top:90px"><span class="eic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></span><h3>Select an email to read it</h3><p>The full body is fetched on demand from Microsoft Graph and sanitized before rendering.</p></div>';
+  }
+  async function openMessage(id){
+    var acct = activeAccount(); if(!acct) return;
+    selectedId = id; renderList();
+    els.reader.classList.add("open");
+    els.reader.innerHTML = '<button class="abtn backbtn" id="readerBack" type="button">← Back to list</button><div class="empty" style="padding-top:70px"><h3>Loading full message…</h3><p>Fetching the body from Microsoft Graph.</p></div>';
+    var back = $("readerBack"); if(back) back.addEventListener("click", function(){ els.reader.classList.remove("open"); });
+    try {
+      var msg = await graphFetch(acct, GRAPH + "/me/messages/" + encodeURIComponent(id) +
+        "?$select=subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,importance,isRead");
+      var attachHtml = "";
+      if(msg.hasAttachments){
+        try {
+          var att = await graphFetch(acct, GRAPH + "/me/messages/" + encodeURIComponent(id) + "/attachments?$select=name,size,contentType");
+          if(att && att.value && att.value.length){
+            attachHtml = '<div class="attach-row">' + att.value.map(function(a){
+              var kb = a.size ? Math.max(1, Math.round(a.size/1024)) + " KB" : "";
+              return '<span class="attach"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 12.5-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 5.2l-8 8a1.8 1.8 0 0 1-2.6-2.6L15 8.3"/></svg>' + esc(a.name || "file") + (kb ? " · " + kb : "") + '</span>';
+            }).join("") + '</div>';
+          }
+        } catch(e){}
+      }
+      var fo = (msg.from && msg.from.emailAddress) || {};
+      var fromName = fo.name || fo.address || "Unknown sender";
+      var toList = (msg.toRecipients || []).map(function(r){ var e2 = r.emailAddress || {}; return esc(e2.name || e2.address || ""); }).filter(Boolean).join(", ");
+      var ccList = (msg.ccRecipients || []).map(function(r){ var e2 = r.emailAddress || {}; return esc(e2.name || e2.address || ""); }).filter(Boolean).join(", ");
+      var bodyHtml;
+      if(msg.body){
+        if(msg.body.contentType === "html"){
+          var clean = (typeof DOMPurify !== "undefined") ? DOMPurify.sanitize(msg.body.content || "", { ADD_ATTR:["target"] }) : esc(msg.body.content || "");
+          bodyHtml = '<div class="body-html">' + clean + '</div>';
+        } else {
+          bodyHtml = '<div class="body-text">' + esc(msg.body.content || "") + '</div>';
+        }
+      } else bodyHtml = '<p style="color:var(--muted)">(No body content)</p>';
+
+      els.reader.innerHTML =
+        '<button class="abtn backbtn" id="readerBack2" type="button">← Back to list</button>' +
+        '<div>' + (msg.importance === "high" ? '<span class="mtag imp">High importance</span> ' : '') +
+        '<span class="mtag">' + (msg.isRead ? "Read" : "Unread") + '</span></div>' +
+        '<h2>' + esc(msg.subject || "(No subject)") + '</h2>' +
+        '<div class="rmeta"><span class="ava">' + esc(initials(fromName)) + '</span>' +
+        '<div class="who"><b>' + esc(fromName) + '</b>' + (fo.address ? " &lt;" + esc(fo.address) + "&gt;" : "") +
+        (toList ? '<br/>To: ' + toList : '') + (ccList ? '<br/>Cc: ' + ccList : '') + '</div>' +
+        '<div class="when">' + esc(fmtFull(msg.receivedDateTime)) + '</div></div>' +
+        attachHtml + bodyHtml;
+      var b2 = $("readerBack2"); if(b2) b2.addEventListener("click", function(){ els.reader.classList.remove("open"); });
+      Array.prototype.forEach.call(els.reader.querySelectorAll("a"), function(a){
+        a.setAttribute("target","_blank"); a.setAttribute("rel","noopener noreferrer");
+      });
+      els.reader.scrollTop = 0;
+    } catch(e){
+      els.reader.innerHTML = '<button class="abtn backbtn" id="readerBack3" type="button">← Back to list</button><div class="empty"><h3>Couldn\'t load this message</h3><p>' + esc(e.message || String(e)) + '</p></div>';
+      var b3 = $("readerBack3"); if(b3) b3.addEventListener("click", function(){ els.reader.classList.remove("open"); });
+    }
+  }
+
+  /* ---------- wipe ---------- */
+  function wipeAll(silent){
+    accounts = []; activeIdx = -1; messages = []; nextLink = null; selectedId = null;
+    if(expiryTimer){ clearInterval(expiryTimer); expiryTimer = null; }
+    els.pasteInput.value = "";
+    renderParse(); hideErr();
+    els.stepsBar.classList.remove("show");
+    els.mailList.innerHTML = ""; renderReaderEmpty();
+    exitToConnect();
+    if(!silent) toast("Session wiped — credentials and mail erased from memory");
+  }
+
+  /* ---------- events ---------- */
+  els.pasteInput.addEventListener("input", function(){ hideErr(); renderParse(); });
+  els.pasteInput.addEventListener("keydown", function(e){
+    if((e.metaKey || e.ctrlKey) && e.key === "Enter"){ e.preventDefault(); connect(); }
+  });
+  els.connectBtn.addEventListener("click", connect);
+  els.clearBtn.addEventListener("click", function(){ els.pasteInput.value = ""; hideErr(); renderParse(); els.pasteInput.focus(); });
+  els.pasteBtn.addEventListener("click", async function(){
+    try {
+      var t = await navigator.clipboard.readText();
+      if(t){ els.pasteInput.value = t; hideErr(); renderParse(); toast("Pasted from clipboard"); }
+      else toast("Clipboard is empty");
+    } catch(e){ toast("Clipboard read was blocked — paste manually with Ctrl/Cmd+V"); els.pasteInput.focus(); }
+  });
+  els.downloadBtn.addEventListener("click", function(){
+    var blob = new Blob(["<!doctype html>\n" + document.documentElement.outerHTML], { type:"text/html" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = "index.html";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    toast("index.html downloaded — drop it in a GitHub repo and import it on Vercel");
+  });
+  els.refreshBtn.addEventListener("click", function(){ loadMessages(true); });
+  els.loadMoreBtn.addEventListener("click", function(){ loadMessages(false); });
+  els.searchBtn.addEventListener("click", function(){ loadMessages(true); });
+  els.searchInput.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); loadMessages(true); } });
+  els.unreadOnly.addEventListener("change", function(){ loadMessages(true); });
+  els.addAcctBtn.addEventListener("click", function(){
+    // Adding keeps current accounts in memory; the paste box becomes the entry point again,
+    // but returning via "back" isn't offered — wipe is the clean reset. So: go to connect
+    // screen in "add" mode by preserving accounts and merging on next connect is complex;
+    // simplest honest behaviour: return to the paste screen with existing session intact
+    // only if the user then cancels. We implement add-mode properly below.
+    enterAddMode();
+  });
+  els.wipeBtn.addEventListener("click", function(){ wipeAll(false); });
+
+  var addMode = false;
+  function enterAddMode(){
+    addMode = true;
+    els.connectView.classList.remove("hidden");
+    els.appView.classList.add("hidden");
+    els.pasteInput.value = "";
+    hideErr(); renderParse();
+    els.parseNote.innerHTML = '<span aria-hidden="true">→</span><span><b>Adding another account.</b> Paste its line and fetch — it joins the accounts already in this session. Reload or wipe ends everything.</span>';
+    var cb = $("addCancelBtn");
+    if(!cb){
+      cb = document.createElement("button");
+      cb.id = "addCancelBtn"; cb.type = "button"; cb.className = "cbtn";
+      cb.textContent = "← Back to inbox";
+      cb.addEventListener("click", function(){
+        addMode = false; cb.classList.add("hidden");
+        els.connectView.classList.add("hidden");
+        els.appView.classList.remove("hidden");
+      });
+      els.connectBtn.parentNode.insertBefore(cb, els.connectBtn);
+    }
+    cb.classList.remove("hidden");
+    window.scrollTo(0,0);
+  }
+
+  document.addEventListener("keydown", function(e){
+    if(els.appView.classList.contains("hidden")) return;
+    var tag = (document.activeElement && document.activeElement.tagName) || "";
+    if(e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA"){ e.preventDefault(); els.searchInput.focus(); }
+    else if((e.key === "r" || e.key === "R") && tag !== "INPUT" && tag !== "TEXTAREA" && !e.metaKey && !e.ctrlKey){ loadMessages(true); }
+    else if(e.key === "Escape"){ els.reader.classList.remove("open"); }
+  });
+  window.addEventListener("beforeunload", function(){
+    accounts = []; messages = []; // best-effort memory hygiene; tab close discards the rest
+  });
+
+  renderParse();
+})();
+</script>
+</body>
+</html>
